@@ -1,1 +1,4 @@
 node_modules
+/target/
+documents.json
+pyro_logs.yaml
