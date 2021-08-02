@@ -1,7 +1,9 @@
 'use strict';
 
 
+
 const ffi = {
+
     invoke: function(arg, commandName = 'invoke') {
         return window.__TAURI__.invoke(commandName, { arg: JSON.stringify(arg) })
 
@@ -20,11 +22,12 @@ const ffi = {
         })
     },
     loadMainPage: function() {
-        window.location = "main.html";
+        window.location.href = "main.html";
     },
     onError: function(errorObj) {
         switch (errorObj.error_name) {
             case "NotEncryptedError":
+                console.log("loading main page");
                 ffi.loadMainPage();
                 break;
 
@@ -32,12 +35,14 @@ const ffi = {
                 console.table(errorObj.error_name, errorObj.details);
         }
     },
+    
     unlock: function(password) {
         ffi.invoke({
             cmd: 'crypt',
             password: password,
             locking: false,
-        })
+        });
+        
     },
     lock: function(password) {
         ffi.invoke({

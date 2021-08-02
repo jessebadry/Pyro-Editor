@@ -54,6 +54,7 @@ fn crypt_operation(password: &str, encrypting: bool) -> Result<(), PyroError> {
   let has_header =
     JFile::file_contains_header(DOCUMENTS_FILE).expect("Couldn't read Document header!");
   if !has_header && !encrypting {
+    println!("not encrypted..");
     return Err(NotEncryptedError);
   }
 
@@ -76,10 +77,15 @@ fn save_document(
   } else {
     documents.insert(doc_name.clone(), Document::new(doc_name, text));
   }
+
   save_documents(&documents)?;
 
   Ok(())
 }
+fn rename_document(documents: &mut DocumentsRaw, doc_name: String) {
+  unimplemented!();
+}
+
 pub fn run_command(arg: &str, documents: &mut HashMap<String, Document>) -> Result<(), UserError> {
   ensure_documents_exists()?;
 
