@@ -1,10 +1,23 @@
 <!DOCTYPE html>
-
+<head>
+  <link rel="stylesheet" href="css/foundation.css" />
+  <link rel="stylesheet" href="css/index.css" />
+</head>
 <body>
-    <label>Password:</label>
-    <input id="passwordField" type="password" />
-    <button id="enterPassword">Enter password</button>
+    <div class="header-title"><h1>Pyro Editor</h1></div>
+    <div class="center">
+      <form>
+        <label>Password:</label>
+        <div id="formContainer">
+          <input id="passwordField" type="password" />
+          <button id="enterPassword" class="button">Enter password</button>
+        </div>
+      </form>
+    </div>
 </body>
 
 <script src="scripts/index.js"></script>
 <script src="scripts/enter_password.js"></script>
+<script src="scripts/jquery.js"></script>
+<script src="scripts/foundation.js"></script>
+<script src="scripts/init.js"></script>
