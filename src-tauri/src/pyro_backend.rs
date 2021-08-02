@@ -21,7 +21,14 @@ pub struct Document {
   document_name: String,
   text: String,
 }
-
+impl Document {
+  pub fn new(doc_name: String, text: String) -> Self {
+    Self {
+      document_name: doc_name,
+      text,
+    }
+  }
+}
 fn save_documents(docs: &HashMap<String, Document>) -> Result<(), PyroError> {
   let doc_json = serde_json::to_string(docs).expect("Document cannot be converted to Json!");
 
@@ -67,23 +74,19 @@ fn save_document(
   if let Some(document) = documents.get_mut(&doc_name) {
     document.text = text;
   } else {
-    let document_name = doc_name.clone();
-    let new_doc = Document {
-      document_name,
-      text,
-    };
-    documents.insert(doc_name, new_doc);
+    documents.insert(doc_name.clone(), Document::new(doc_name, text));
   }
   save_documents(&documents)?;
+
   Ok(())
 }
 pub fn run_command(arg: &str, documents: &mut HashMap<String, Document>) -> Result<(), UserError> {
   ensure_documents_exists()?;
-  
+
   match serde_json::from_str(arg).unwrap() {
     SaveDocument { doc_name, text } => save_document(documents, doc_name, text)?,
     Crypt { password, locking } => crypt_operation(&password, locking)?,
-  
+
     _ => unimplemented!(),
   }
   Ok(())
