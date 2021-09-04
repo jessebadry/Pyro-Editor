@@ -1,0 +1,69 @@
+#documentsListContainer {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    border-right: 1px solid black;
+    margin-right: 20px;
+}
+
+select {
+    all: initial !important;
+}
+
+select {
+    margin-left: 0px;
+    list-style-type: none;
+    text-align: center;
+}
+
+select option {
+    font-size: 15px;
+    font-weight: normal;
+    margin: 5px;
+    border-radius: 2px;
+    margin-left: 0px;
+    color: white;
+    border: 1px solid black;
+    cursor: pointer;
+}
+
+select option:hover {
+    background-color: rgb(99, 22, 22);
+    color: black;
+}
+
+#documentsSearch {}
+
+#docTitleDisplay {
+    display: flex;
+    justify-content: center;
+}
+
+#docTitleDisplay>h1 {
+    color: black;
+}
+
+#editorContainer {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 5;
+    margin-right: 20px;
+    justify-content: center;
+    align-items: center;
+}
+
+#editor {
+    outline: 1px solid red;
+    height: 100%;
+    width: 500px;
+    word-wrap: break-word;
+    flex-grow: 0;
+    background-color: #BFBFBF;
+    margin: 0;
+}
+
+#root {
+    display: flex;
+    justify-content: center;
+    height: 100%;
+}

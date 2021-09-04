@@ -21,6 +21,8 @@ tauri = { version = "1.0.0-beta.5", features = ["api-all"] }
 jencrypt = {git="https://github.com/jessebadry/jencrypt.git"}
 log4rs="1.0.0"
 log = "0.4.14"
+zip = "0.5.13"
+rand = "0.8.4"
 [features]
 default = [ "custom-protocol" ]
 custom-protocol = [ "tauri/custom-protocol" ]

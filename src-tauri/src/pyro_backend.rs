@@ -1,97 +1,20 @@
-use crate::{
-  commands::Cmd::*,
-  errors::{PyroError, PyroError::*, UserError},
-};
-use jencryptlib::{decrypt_files, encrypt_files, j_file::JFile};
+use crate::{commands::Cmd::*, documents::DocumentManager, errors::UserError};
 
-use serde::{Deserialize, Serialize};
-use std::{
-  collections::HashMap,
-  fs::{read, write},
-  io,
-  path::Path,
-  sync::{Arc, Mutex},
-};
-pub type Documents = Arc<Mutex<HashMap<String, Document>>>;
-pub type DocumentsRaw = HashMap<String, Document>;
-const DOCUMENTS_FILE: &str = "documents.json";
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Document {
-  document_name: String,
-  text: String,
-}
-impl Document {
-  pub fn new(doc_name: String, text: String) -> Self {
-    Self {
-      document_name: doc_name,
-      text,
-    }
-  }
-}
-fn save_documents(docs: &HashMap<String, Document>) -> Result<(), PyroError> {
-  let doc_json = serde_json::to_string(docs).expect("Document cannot be converted to Json!");
-
-  write(DOCUMENTS_FILE, doc_json)?;
-  Ok(())
-}
-
-fn ensure_documents_exists() -> Result<(), PyroError> {
-  if !Path::new(DOCUMENTS_FILE).exists() {
-    save_documents(&HashMap::<String, Document>::new())?;
-  }
-  Ok(())
-}
-
-/// Retrieves all text document filenames from the documents folder
-pub fn load_documents() -> io::Result<HashMap<String, Document>> {
-  Ok(serde_json::from_slice(&read(DOCUMENTS_FILE)?)?)
-}
-
-fn crypt_operation(password: &str, encrypting: bool) -> Result<(), PyroError> {
-  /*TODO: log errors */
-
-  let has_header =
-    JFile::file_contains_header(DOCUMENTS_FILE).expect("Couldn't read Document header!");
-  if !has_header && !encrypting {
-    println!("not encrypted..");
-    return Err(NotEncryptedError);
-  }
-
-  let crypt_method = if encrypting {
-    encrypt_files
-  } else {
-    decrypt_files
-  };
-
-  crypt_method(password, &[DOCUMENTS_FILE]).map_err(CryptError)
-}
-/// Creates or overwrites a document, then saves to disk as `DOCUMENTS_FILE`
-fn save_document(
-  documents: &mut DocumentsRaw,
-  doc_name: String,
-  text: String,
-) -> Result<(), PyroError> {
-  if let Some(document) = documents.get_mut(&doc_name) {
-    document.text = text;
-  } else {
-    documents.insert(doc_name.clone(), Document::new(doc_name, text));
-  }
-
-  save_documents(&documents)?;
-
-  Ok(())
-}
-fn rename_document(documents: &mut DocumentsRaw, doc_name: String) {
-  unimplemented!();
-}
-
-pub fn run_command(arg: &str, documents: &mut HashMap<String, Document>) -> Result<(), UserError> {
-  ensure_documents_exists()?;
+pub fn run_command(arg: &str, doc_manager: &mut DocumentManager) -> Result<(), UserError> {
+  doc_manager.ensure_resources()?;
 
   match serde_json::from_str(arg).unwrap() {
-    SaveDocument { doc_name, text } => save_document(documents, doc_name, text)?,
-    Crypt { password, locking } => crypt_operation(&password, locking)?,
+    SaveDocument { doc_name, text } => doc_manager.save_document(doc_name, text)?,
+    Crypt { password, locking } => {
+      // if locking {
+      //   documents::zip_documents(&documents)?;
+      // }
+      // crypt_operation(&password, locking)?;
+      // // After decrypting unzip the archive
+      // if !locking {
+      //   documents::unzip_documents()?;
+      // }
+    }
 
     _ => unimplemented!(),
   }

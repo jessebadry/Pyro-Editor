@@ -1,0 +1,10 @@
+html,
+body {
+    background-color: #262626;
+    height: 100%;
+    margin: 0;
+}
+
+* {
+    font-weight: bold;
+}

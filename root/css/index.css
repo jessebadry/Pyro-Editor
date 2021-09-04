@@ -1,37 +1,28 @@
-html,
-body {
-  background-color: #262626;
-  height:100%;
-  margin: 0;
-  overflow: hidden;
-}
-* {
-  color: #ff495c !important;
-  font-weight: bold;
-}
 .header-title {
-  display: flex;
-  justify-content: center;
+    display: flex;
+    justify-content: center;
 }
-.center {
-  display: flex;
 
-  height: 100%;
-  align-items: center;
-  justify-content: center;
-  background-color: #262626;
+.center {
+    display: flex;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    background-color: #262626;
 }
+
 #passwordField {
-  width: 400px;
-  height: 50px;
+    width: 400px;
+    height: 50px;
 }
+
 #enterPassword {
-  height: 50px;
-  background-color: #c1b2ab !important;
+    height: 50px;
+    background-color: #c1b2ab !important;
 }
 
 #formContainer {
-  display: flex;
-  flex-direction: row;
-  justify-content: left;
+    display: flex;
+    flex-direction: row;
+    justify-content: left;
 }
