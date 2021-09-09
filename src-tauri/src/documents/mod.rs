@@ -1,18 +1,15 @@
 use crate::errors::{PyroError, PyroError::*};
 
 use jencrypt::{decrypt_files, encrypt_files, j_file::JFile};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::{
-  collections::HashSet,
-  fs::{read, write, File, OpenOptions},
-  io,
-  io::{Read, Write},
-  path::Path,
-};
+use std::{collections::HashSet, error::Error, fmt};
+type Result<T, E = DocError> = std::result::Result<T, E>;
 
-use zip::{result::ZipResult, write::FileOptions as ZipFileOptions, ZipArchive, ZipWriter};
-pub const DOCUMENTS_FILE: &str = "documents.zip";
-pub const DOCUMENT_NAMES_FILE: &str = "docs.json";
+const DOCUMENTS_DB: &str = "documents.sqlite";
+const DOC_NAME_FIELD: &str = "name";
+const DOC_TABLE: &str = "Documents";
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Document {
@@ -27,100 +24,110 @@ impl Document {
     }
   }
 }
+#[derive(Debug)]
+enum DocError {
+  DbError(rusqlite::Error),
+  DocumentNotFound,
+  LockedError,
+}
+impl fmt::Display for DocError {
+  fn fmt(&self, _fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    todo!("Implement user error messages.")
+  }
+}
+impl std::error::Error for DocError {}
+impl From<rusqlite::Error> for DocError {
+  fn from(err: rusqlite::Error) -> DocError {
+    DbError(err)
+  }
+}
+use DocError::*;
+
 pub struct DocumentManager {
-  pub document_names: HashSet<String>,
   locked: bool,
 }
 impl DocumentManager {
-  pub fn new() -> Self {
+  fn initialize_table() -> Result<()> {
+    let conn = Self::conn()?;
+
+    conn.execute(
+      &format!(
+        "CREATE TABLE [IF NOT EXISTS] {} (
+        name TEXT NOT NULL,
+        text TEXT NOT NULL,
+        )
+      ",
+        DOC_TABLE
+      ),
+      [],
+    )?;
+
+    Ok(())
+  }
+  pub fn new() -> Result<Self> {
+    Self::initialize_table()?;
     // If the file contains the scrypt header we can assume the file is encrypted.
-    let locked = JFile::file_contains_header(DOCUMENTS_FILE).unwrap_or(false);
+    let locked = JFile::file_contains_header(DOCUMENTS_DB).unwrap_or(false);
 
-    Self {
-      document_names: load_document_names().unwrap_or(default_doc_names()),
-      locked,
-    }
+    Ok(Self { locked })
   }
-  pub fn ensure_file_exists(
-    &self,
-    file_path: impl AsRef<Path>,
-    default_content: &[u8],
-  ) -> Result<(), PyroError> {
-    if !file_path.as_ref().exists() {
-      write(file_path, default_content)?;
+
+  fn conn() -> Result<Connection> {
+    Connection::open(DOCUMENTS_DB).map_err(DbError)
+  }
+
+  fn get_doc_names() -> HashSet<String> {
+    unimplemented!()
+  }
+
+  pub fn save_document(&self, doc: &Document) -> Result<()> {
+    if self.locked {
+      return Err(LockedError);
     }
+
+    let conn = Self::conn()?;
+
+    conn.execute(
+      &format!("INSERT OR REPLACE INTO {} VALUES(:name, :text)", DOC_TABLE),
+      &[(":name", &doc.document_name), (":text", &doc.text)],
+    )?;
+
     Ok(())
   }
-  pub fn ensure_resources(&self) -> Result<(), PyroError> {
-    // if we are unlocked, this means the files are also extracted
-    if !self.locked {
-      self.ensure_file_exists(DOCUMENT_NAMES_FILE, b"[]")?;
-    }
-    self.ensure_file_exists(DOCUMENTS_FILE, b"")?;
 
-    Ok(())
-  }
-  /// Creates or overwrites a document, then saves to disk using `doc_name` as its save name.
-  pub fn save_document(&mut self, doc_name: String, text: String) -> Result<(), PyroError> {
-    let doc_name = doc_name.to_lowercase();
+  pub fn find_doc_by_name(doc_name: String) -> Result<Document> {
+    let conn = Self::conn()?;
 
-    let (document, save_names) = if self.document_names.contains(&doc_name) {
-      let mut document = load_document(&doc_name)?;
+    let stmt = conn.prepare("SELECT name, text FROM Documents where {} = :name")?;
+    let rows = stmt.query(&[(":name", &doc_name)])?;
 
-      document.text = text;
-
-      (document, false)
+    if let Some(row) = rows.next()? {
+      Ok(Document {
+        document_name: row.get(0)?,
+        text: row.get(1)?,
+      })
     } else {
-      self.document_names.insert(doc_name.clone());
-      let document = Document::new(doc_name, text);
-      self.save_document_names()?;
-
-      (document, true)
-    };
-    write_document(&document)?;
-    Ok(())
+      Err(DocError::DocumentNotFound)
+    }
   }
-  fn save_document_names(&self) -> Result<(), PyroError> {
-    let doc_json = serde_json::to_string(&self.document_names)
-      .expect("Document names cannot be converted to Json!");
-    write(DOCUMENT_NAMES_FILE, doc_json)?;
-    Ok(())
-  }
-  pub fn unzip_documents() -> Result<(), PyroError> {
-    let mut zip_archive = get_zip_archive()?;
-    let mut document_contents = String::new();
 
-    for index in 0..zip_archive.len() {
-      let mut zip_file = zip_archive.by_index(index)?;
-      zip_file.read_to_string(&mut document_contents)?;
-      write(
-        zip_file.enclosed_name().ok_or(CorruptZipError)?,
-        &document_contents,
-      )?;
-      document_contents.clear();
+  pub fn load_document_names() -> Result<HashSet<String>> {
+    let records =
+      Self::conn()?.prepare(&format!("SELECT {} FROM {}", DOC_NAME_FIELD, DOC_TABLE))?;
+
+    let mut doc_names = records.query_map([], |row| row.get(0))?;
+
+    let mut names = HashSet::<String>::new();
+    for name in doc_names {
+      names.insert(name?);
     }
 
-    Ok(())
-  }
-  pub fn zip_documents(&self) -> Result<(), PyroError> {
-    let mut zip_writer = create_zip_writer()?;
-
-    let options = ZipFileOptions::default()
-      .compression_method(zip::CompressionMethod::Stored)
-      .unix_permissions(0o755);
-
-    for doc_name in &self.document_names {
-      zip_writer.start_file(doc_name, options)?;
-      zip_writer.write_all(&read(doc_name)?)?;
-    }
-
-    Ok(())
+    Ok(names)
   }
 
   fn crypt_operation(password: &str, encrypting: bool) -> Result<(), PyroError> {
     /*TODO: log errors */
-    let has_header =
-      JFile::file_contains_header(DOCUMENTS_FILE).expect("Couldn't read Document header!");
+    let has_header = JFile::file_contains_header(DOCUMENTS_DB)?;
     // if no header and we are decrypting, this means this file is not encrypted.
     if !has_header && !encrypting {
       return Err(NotEncryptedError);
@@ -132,61 +139,41 @@ impl DocumentManager {
       decrypt_files
     };
 
-    crypt_method(password, &[DOCUMENTS_FILE])
+    crypt_method(password, &[DOCUMENTS_DB])
       .map_err(CryptError)?
       .try_for_each(|res| res)?;
 
     Ok(())
   }
+
   pub fn lock(&self, password: &str) -> Result<(), PyroError> {
-    self.zip_documents()?;
     Self::crypt_operation(password, true)?;
+
     Ok(())
   }
   pub fn unlock(&self, password: &str) -> Result<(), PyroError> {
     Self::crypt_operation(password, false)?;
-    Self::unzip_documents()?;
+
     Ok(())
   }
 }
 
-fn get_zip_archive() -> ZipResult<ZipArchive<File>> {
-  ZipArchive::new(
-    OpenOptions::new()
-      .read(true)
-      .write(true)
-      .create(true)
-      .open(DOCUMENTS_FILE)?,
-  )
-}
-fn create_zip_writer() -> io::Result<ZipWriter<File>> {
-  Ok(ZipWriter::new(File::create(DOCUMENTS_FILE)?))
-}
-
 pub fn default_doc_names() -> HashSet<String> {
-  let mut new_set = HashSet::new();
+  let mut new_set = HashSet::<String>::new();
 
-  new_set.insert(DOCUMENT_NAMES_FILE.to_string());
-
-  new_set
-}
-
-/// Retrieves all text document filenames from the documents folder
-pub fn load_document_names() -> Result<HashSet<String>, PyroError> {
-  Ok(serde_json::from_slice(&read(DOCUMENTS_FILE)?)?)
-}
-
-fn load_document(doc_name: &str) -> Result<Document, PyroError> {
-  Ok(serde_json::from_slice(&read(doc_name)?)?)
-}
-fn write_document(document: &Document) -> io::Result<()> {
-  write(&document.document_name, &document.text)
+  todo!("get document names from sqlite db")
 }
 
 #[cfg(test)]
 mod tests {
+  use super::DocumentManager;
+
   #[test]
-  fn test_crypt_operation() {
-    
+  fn test_crypt_operation() {}
+
+  #[test]
+  fn make_documents() {
+    let mut manager = DocumentManager::new().expect("Could not initialize sqlite table!");
+    manager.unlock("p123");
   }
 }

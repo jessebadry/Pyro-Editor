@@ -1,6 +1,5 @@
 use crate::errors::PyroError;
 use serde::Serialize;
-use zip::result::ZipError;
 #[derive(Serialize)]
 /// Used to propagate PyroError's to the user interface, all errors should be handled using this struct.
 pub struct UserError {
@@ -8,15 +7,6 @@ pub struct UserError {
   pub details: Option<String>,
 }
 type UserErrorArgs = (&'static str, Option<String>);
-fn handle_zip_errors(zip_error: ZipError) -> UserErrorArgs {
-  let name = match zip_error {
-    ZipError::InvalidArchive(_) => "Invalid Zip File",
-    ZipError::FileNotFound => "Zip Not Found",
-    _ => "CorruptZipError",
-  };
-
-  (name, Some(zip_error.to_string()))
-}
 
 impl From<PyroError> for UserError {
   fn from(pyro_error: PyroError) -> Self {
@@ -27,8 +17,6 @@ impl From<PyroError> for UserError {
         "NotEncryptedError",
         Some("The Documents file is not encrypted!".into()),
       ),
-      PyroError::ZipError(err) => handle_zip_errors(err),
-      PyroError::CorruptZipError => ("CorruptZipError", None),
       _ => ("Unimplemented Error", Some(pyro_error.to_string())),
     };
 

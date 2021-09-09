@@ -1,7 +1,7 @@
 use crate::{commands::Cmd::*, documents::DocumentManager, errors::UserError};
 
 pub fn run_command(arg: &str, doc_manager: &mut DocumentManager) -> Result<(), UserError> {
-  doc_manager.ensure_resources()?;
+  
 
   match serde_json::from_str(arg).unwrap() {
     SaveDocument { doc_name, text } => doc_manager.save_document(doc_name, text)?,
