@@ -89,7 +89,7 @@ impl DocumentManager {
                  )
                 ",
             DOC_TABLE);
-        conn.execute(table_sql, [1, 2, 3])?;
+        conn.execute(table_sql, [])?;
 
         Ok(())
     }
