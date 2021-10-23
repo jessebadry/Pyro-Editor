@@ -22,7 +22,9 @@ jencrypt = {git="https://github.com/jessebadry/jencrypt.git"}
 log4rs="1.0.0"
 log = "0.4.14"
 rand = "0.8.4"
-rusqlite = "0.25.3"
+[dependencies.rusqlite]
+version = "0.26.0"
+features = ["bundled"]
 [features]
 default = [ "custom-protocol" ]
 custom-protocol = [ "tauri/custom-protocol" ]

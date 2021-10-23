@@ -1,6 +1,12 @@
-use std::{error, io};
 mod user_error;
+
+
+
 pub use user_error::*;
+use std::{error, io};
+use std::fmt;
+
+
 
 #[derive(Debug)]
 pub enum PyroError {
@@ -26,6 +32,7 @@ impl std::fmt::Display for PyroError {
       Self::IOError(io_error) => io_error.to_string(),
       _ => unimplemented!(),
     };
+
     write!(f, "{}", &message)
   }
 }
