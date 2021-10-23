@@ -33,15 +33,16 @@ fn invoke(arg: &str, documents: State<SafeDocManager>) -> Result<(), UserError> 
 
 #[command]
 fn load_documents(documents: State<SafeDocManager>) -> Result<HashSet<String>, UserError> {
-    let doc_manager = &mut *documents.inner().lock().unwrap();
 
+    let doc_manager = &mut *documents.inner().lock().unwrap();
+    doc_manager.initialize_table()?;
     Ok(doc_manager.load_document_names()?.clone())
 }
 
 fn main() {
     let mut document_manager = DocumentManager::new(PYRO_DB_NAME);
 
-    document_manager.initialize_table()?;
+
 
     logging::init_file_logger().expect("Could not initialize logger");
 

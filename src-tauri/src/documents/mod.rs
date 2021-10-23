@@ -20,6 +20,9 @@ pub enum DocError {
     InternalDbError(rusqlite::Error),
     DocumentNotFound,
     SavedWhenLocked,
+    /// In the event where the document manager is in memory mode, and a function attempts
+    /// to use the non-existent database name, there is no physical db file to operate upon.
+    NoPhysicalDb,
 }
 
 impl fmt::Display for DocError {
@@ -27,8 +30,8 @@ impl fmt::Display for DocError {
         let name = match self {
             DocumentNotFound => "DocumentNotFound",
             SavedWhenLocked => "SavedWhenLocked",
-            /* TODO LOGGING */
             InternalDbError(err) => "An internal DB error has occurred, oops.",
+            _ => unimplemented!()
         };
 
         write!(_fmt, "{}", name)
@@ -50,32 +53,33 @@ pub struct DocumentManager {
     locked: bool,
     from_memory: bool,
     db_name: Option<String>,
+    table_initialized: bool,
 }
 
 impl DocumentManager {
     pub fn new(db_name: impl AsRef<str>) -> Self {
 
         // If the file contains the scrypt header we can assume the file is encrypted.
-        let locked = JFile::file_contains_header(db_name).unwrap_or(false);
+        let locked = JFile::file_contains_header(&db_name.as_ref().to_string())
+            .unwrap_or(false);
 
         Self {
             locked,
-            from_memory: false,
             db_name: Some(db_name.as_ref().to_string()),
+            ..Default::default()
         }
     }
 
 
     pub fn new_in_memory() -> Self {
         Self {
-            locked: false,
             from_memory: true,
-            db_name: None,
+            ..Default::default()
         }
     }
 
-     /// Attempt's to create the specified DB file of the manager.
-     pub fn initialize_table(&self) -> Result<()> {
+    /// Attempt's to create the specified DB file of the manager.
+    pub fn initialize_table(&self) -> Result<()> {
         let conn = self.conn()?;
         let table_sql = &format!(
             "CREATE TABLE [IF NOT EXISTS] {} (
@@ -93,8 +97,7 @@ impl DocumentManager {
         if self.from_memory {
             Connection::open_in_memory().map_err(InternalDbError)
         } else {
-            let db_name = self.db_name.expect("db name cannot be None, \
-                                        from_memory must be true within this instance.");
+            let db_name = self.db_name.ok_or(NoPhysicalDb)?;
 
             Connection::open(&db_name).map_err(InternalDbError)
         }
@@ -131,8 +134,8 @@ impl DocumentManager {
     /// ```
     pub fn find_doc_by_name(&self, doc_name: String) -> Result<Document> {
         let conn = self.conn()?;
-
-        let mut stmt = conn.prepare("SELECT id, name, text FROM Documents where {} = :name")?;
+        let sql = "SELECT id, name, text FROM Documents where name = :name";
+        let mut stmt = conn.prepare(sql)?;
 
         let mut rows = stmt.query(&[(":name", &doc_name)])?;
         let first_row = rows.next()?;
@@ -146,9 +149,10 @@ impl DocumentManager {
 
     pub fn load_document_names(&self) -> Result<HashSet<String>> {
         let conn = self.conn()?;
-        let mut records = conn.prepare(&format!("SELECT {} FROM {}", DOC_NAME_FIELD, DOC_TABLE))?;
+        let mut records = conn.prepare("select name from Documents")?;
 
-        let mut doc_names = records.query_map([], |row| row.get(0))?;
+        let mut doc_names = records.query_map([],
+                                              |row| row.get(0))?;
 
 
         let mut names = HashSet::<String>::new();
@@ -160,8 +164,13 @@ impl DocumentManager {
     }
     ///
     fn crypt_operation(&self, password: &str, encrypting: bool) -> Result<(), PyroError> {
-        let has_header = JFile::file_contains_header(DOCUMENTS_DB)?;
-        // the file is not decryptable, we assume this file is not encrypted.
+        if let None = self.db_name {
+            return Err(DocError::NoPhysicalDb);
+        }
+
+
+        let has_header = JFile::file_contains_header(self.db_name.unwrap().as_ref())?;
+
         if !(encrypting && has_header) {
             return Err(NotEncryptedError);
         }
@@ -172,7 +181,7 @@ impl DocumentManager {
             jencrypt::decrypt_files
         };
 
-        crypt_method(password, &[DOCUMENTS_DB])
+        crypt_method(password, &[&self.db_name.unwrap()])
             .map_err(CryptError)?
             .try_for_each(|res| res)?;
 
@@ -188,6 +197,17 @@ impl DocumentManager {
         self.crypt_operation(password, false)?;
 
         Ok(())
+    }
+}
+
+impl Default for DocumentManager {
+    fn default() -> Self {
+        Self {
+            db_name: None,
+            from_memory: false,
+            locked: false,
+            table_initialized: false,
+        }
     }
 }
 
@@ -217,6 +237,6 @@ mod tests {
     fn find_doc_by_name() {
         setup!(manager);
 
-        manager.find_doc_by_name("");
+        manager.find_doc_by_name("coolio");
     }
 }
